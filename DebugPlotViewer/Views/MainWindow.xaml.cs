@@ -1,0 +1,19 @@
+using DebugPlotViewer.ViewModels;
+using System.Windows;
+
+namespace DebugPlotViewer.Views
+{
+    public partial class MainWindow : Window
+    {
+        public MainWindow()
+        {
+            InitializeComponent();
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (DataContext is MainViewModel vm)
+                vm.Dispose();
+        }
+    }
+}

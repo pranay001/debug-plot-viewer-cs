@@ -1,0 +1,117 @@
+<Window x:Class="DebugPlotViewer.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:DebugPlotViewer.ViewModels"
+        mc:Ignorable="d"
+        Title="Debug Plot Viewer"
+        Height="620" Width="960"
+        MinHeight="480" MinWidth="700"
+        WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing">
+
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210" MinWidth="160" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ── Left panel ── -->
+            <DockPanel Grid.Column="0" Margin="10,10,6,10">
+
+                <!-- Title -->
+                <Border DockPanel.Dock="Top"
+                        Background="#1E3A5F" CornerRadius="4"
+                        Padding="8,6" Margin="0,0,0,10">
+                    <TextBlock Text="Debug Plot Viewer"
+                               Foreground="White" FontWeight="Bold"
+                               FontSize="13" TextWrapping="Wrap" />
+                </Border>
+
+                <!-- Help button -->
+                <Button DockPanel.Dock="Bottom"
+                        Content="? Help"
+                        Command="{Binding OpenHelpCommand}"
+                        Padding="6,4" Margin="0,10,0,0"
+                        HorizontalAlignment="Stretch" />
+
+                <!-- Server address -->
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                    <TextBlock Text="gRPC Server" FontWeight="SemiBold"
+                               Foreground="#555" FontSize="11" Margin="0,0,0,2" />
+                    <TextBlock Text="{Binding ServerAddress}"
+                               Foreground="#1E3A5F" FontFamily="Consolas"
+                               FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!-- Plot list -->
+                <StackPanel>
+                    <TextBlock Text="Plots" FontWeight="SemiBold"
+                               Foreground="#555" FontSize="11" Margin="0,0,0,4" />
+                    <ListBox ItemsSource="{Binding PlotNames}"
+                             SelectedItem="{Binding SelectedPlotName, Mode=TwoWay}"
+                             Height="280"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             BorderBrush="#CCC" BorderThickness="1" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontStyle="Italic" Foreground="#888" FontSize="11"
+                               Text="{Binding SelectedPlotName, FallbackValue='– No plot selected –',
+                                              TargetNullValue='– No plot selected –'}" />
+                </StackPanel>
+            </DockPanel>
+
+            <!-- ── Splitter ── -->
+            <GridSplitter Grid.Column="1"
+                          Width="4"
+                          HorizontalAlignment="Stretch"
+                          Background="#DDD" />
+
+            <!-- ── Right panel: plot display area (mirrors LabVIEW SubPanel) ── -->
+            <Border Grid.Column="2"
+                    Margin="6,10,10,10"
+                    BorderBrush="#CCC" BorderThickness="1"
+                    CornerRadius="2">
+                <Grid>
+                    <!-- Placeholder when no plot is selected -->
+                    <TextBlock Text="Select a plot from the list on the left."
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="#AAA" FontSize="14" FontStyle="Italic">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentPlotViewModel}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <!-- Active plot view (DataTemplate in App.xaml maps PlotViewModel → PlotView) -->
+                    <ContentControl Content="{Binding CurrentPlotViewModel}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ── Status bar ── -->
+        <StatusBar Grid.Row="1" Background="#F0F0F0" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="#555" />
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

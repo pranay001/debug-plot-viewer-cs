@@ -1,0 +1,12 @@
+<Application x:Class="DebugPlotViewer.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DebugPlotViewer.ViewModels"
+             xmlns:views="clr-namespace:DebugPlotViewer.Views"
+             StartupUri="Views/MainWindow.xaml">
+    <Application.Resources>
+        <DataTemplate DataType="{x:Type vm:PlotViewModel}">
+            <views:PlotView />
+        </DataTemplate>
+    </Application.Resources>
+</Application>
