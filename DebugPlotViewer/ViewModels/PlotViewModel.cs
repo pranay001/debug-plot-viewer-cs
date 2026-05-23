@@ -35,20 +35,23 @@ namespace DebugPlotViewer.ViewModels
         /// </summary>
         public void UpdateData(string csvData, List<string> labels)
         {
-            double[][] columns = ParseCsvToColumns(csvData);
+            // In LabVIEW, UpdatePlotData.vi indexes the 2D array by row in a ForLoop alongside
+            // PlotLabel — so row i is the complete time-series for PlotLabel[i].
+            // CSV layout: each ROW = one series; columns within that row = samples.
+            double[][] seriesRows = ParseCsvToRows(csvData);
 
             var model = new PlotModel { Title = PlotName };
             model.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Title = "Samples" });
             model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Data" });
 
-            for (int i = 0; i < columns.Length; i++)
+            for (int i = 0; i < seriesRows.Length; i++)
             {
                 string seriesTitle = i < labels.Count ? labels[i] : $"Series {i + 1}";
                 var series = new LineSeries { Title = seriesTitle };
 
-                double[] col = columns[i];
-                for (int j = 0; j < col.Length; j++)
-                    series.Points.Add(new DataPoint(j, col[j]));
+                double[] samples = seriesRows[i];
+                for (int j = 0; j < samples.Length; j++)
+                    series.Points.Add(new DataPoint(j, samples[j]));
 
                 model.Series.Add(series);
             }
@@ -57,38 +60,29 @@ namespace DebugPlotViewer.ViewModels
         }
 
         /// <summary>
-        /// Parse LabVIEW-style CSV into columns.
-        /// LabVIEW Spreadsheet String To Array uses comma delimiter; rows are newline-separated.
-        /// Each column corresponds to one PlotLabel entry (one waveform series).
+        /// Parse LabVIEW-style CSV into rows where each row is one waveform series.
+        /// LabVIEW's Spreadsheet String To Array (comma delimiter) produces a 2D array
+        /// where row i holds all samples for PlotLabel[i].
         /// </summary>
-        public static double[][] ParseCsvToColumns(string csvData)
+        public static double[][] ParseCsvToRows(string csvData)
         {
             if (string.IsNullOrWhiteSpace(csvData))
                 return Array.Empty<double[]>();
 
-            var rows = csvData.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            if (rows.Length == 0)
-                return Array.Empty<double[]>();
+            var lines = csvData.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var result = new List<double[]>(lines.Length);
 
-            var firstCells = rows[0].Split(',');
-            int numCols = firstCells.Length;
-
-            var columns = new List<double>[numCols];
-            for (int c = 0; c < numCols; c++)
-                columns[c] = new List<double>();
-
-            foreach (var row in rows)
+            foreach (var line in lines)
             {
-                var cells = row.Split(',');
-                for (int c = 0; c < numCols && c < cells.Length; c++)
-                {
-                    if (double.TryParse(cells[c].Trim(), System.Globalization.NumberStyles.Float,
-                            System.Globalization.CultureInfo.InvariantCulture, out double val))
-                        columns[c].Add(val);
-                }
+                var cells = line.Split(',');
+                var values = new double[cells.Length];
+                for (int c = 0; c < cells.Length; c++)
+                    double.TryParse(cells[c].Trim(), System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out values[c]);
+                result.Add(values);
             }
 
-            return columns.Select(c => c.ToArray()).ToArray();
+            return result.ToArray();
         }
 
         private PlotModel BuildEmptyModel()
