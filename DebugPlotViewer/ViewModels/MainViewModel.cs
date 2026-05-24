@@ -13,18 +13,20 @@ namespace DebugPlotViewer.ViewModels
     /// <summary>
     /// Root ViewModel. Mirrors the LabVIEW PlotManager actor:
     ///   - Starts gRPC server
-    ///   - Maintains a registry of PlotViewModels keyed by plot name
-    ///   - Updates the UI plot list and routes data to the correct PlotViewModel
+    ///   - Maintains a registry of view-models keyed by plot name
+    ///   - Routes data to PlotViewModel ("Graph") or TableViewModel ("Table")
     /// Also owns the PlotUIDisplay responsibilities (server IP, plot selection, help).
     /// </summary>
     public class MainViewModel : ViewModelBase, IDisposable
     {
-        private readonly ConcurrentDictionary<string, PlotViewModel> _plotRegistry
-            = new ConcurrentDictionary<string, PlotViewModel>(StringComparer.OrdinalIgnoreCase);
+        // Registry holds either PlotViewModel or TableViewModel, keyed by plot name.
+        // Type is fixed at first registration (mirrors LabVIEW actor-per-plot design).
+        private readonly ConcurrentDictionary<string, ViewModelBase> _plotRegistry
+            = new ConcurrentDictionary<string, ViewModelBase>(StringComparer.OrdinalIgnoreCase);
 
         private Server _grpcServer;
         private string _selectedPlotName;
-        private PlotViewModel _currentPlotViewModel;
+        private ViewModelBase _currentPlotViewModel;
         private string _serverAddress;
         private string _statusMessage = "Waiting for data...";
 
@@ -43,7 +45,12 @@ namespace DebugPlotViewer.ViewModels
             }
         }
 
-        public PlotViewModel CurrentPlotViewModel
+        /// <summary>
+        /// Currently displayed view-model. The DataTemplates in App.xaml map:
+        ///   PlotViewModel  → PlotView  (line chart)
+        ///   TableViewModel → TableView (data grid)
+        /// </summary>
+        public ViewModelBase CurrentPlotViewModel
         {
             get => _currentPlotViewModel;
             private set => SetProperty(ref _currentPlotViewModel, value);
@@ -70,6 +77,8 @@ namespace DebugPlotViewer.ViewModels
             StartGrpcServer();
         }
 
+        // ── gRPC server ──────────────────────────────────────────────────────────
+
         private void StartGrpcServer()
         {
             try
@@ -91,50 +100,79 @@ namespace DebugPlotViewer.ViewModels
             }
         }
 
+        // ── Incoming data handler ─────────────────────────────────────────────────
+
         private void OnPlotDataReceived(PlotDataPayload payload)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
                 bool isNew = false;
-                var plotVm = _plotRegistry.GetOrAdd(payload.PlotName, name =>
+
+                if (!_plotRegistry.TryGetValue(payload.PlotName, out ViewModelBase vm))
                 {
-                    isNew = true;
-                    return new PlotViewModel(name);
-                });
+                    // Create the correct ViewModel based on PlotType (fixed for the lifetime of this plot)
+                    vm = CreateViewModel(payload.PlotName, payload.PlotType);
+
+                    if (_plotRegistry.TryAdd(payload.PlotName, vm))
+                        isNew = true;
+                    else
+                        // Another thread beat us – use whatever is already registered
+                        vm = _plotRegistry[payload.PlotName];
+                }
 
                 if (isNew)
                     PlotNames.Add(payload.PlotName);
 
-                plotVm.UpdateData(payload.Data, payload.PlotLabel);
+                // Dispatch data to the correct concrete type
+                if (vm is PlotViewModel graphVm)
+                    graphVm.UpdateData(payload.Data, payload.PlotLabel);
+                else if (vm is TableViewModel tableVm)
+                    tableVm.UpdateData(payload.Data, payload.PlotLabel);
 
                 StatusMessage = $"Updated: {payload.PlotName}";
 
-                // Refresh displayed plot if it is the currently selected one
+                // Keep the displayed view in sync when the selected plot is updated
                 if (SelectedPlotName == payload.PlotName)
-                    CurrentPlotViewModel = plotVm;
+                    CurrentPlotViewModel = vm;
             });
         }
+
+        private static ViewModelBase CreateViewModel(string plotName, string plotType)
+        {
+            if (string.Equals(plotType, "Table", StringComparison.OrdinalIgnoreCase))
+                return new TableViewModel(plotName);
+
+            // "Graph" or any unrecognised type → waveform chart (matches LabVIEW default)
+            return new PlotViewModel(plotName);
+        }
+
+        // ── Help ─────────────────────────────────────────────────────────────────
 
         private void OpenHelp()
         {
             MessageBox.Show(
                 "Debug Plot Viewer\n\n" +
-                "Receives plot data via gRPC and displays each named plot as a waveform graph.\n\n" +
+                "Receives plot data via gRPC and displays each named plot as a waveform graph or data table.\n\n" +
                 $"gRPC Server Address: {ServerAddress}\n" +
                 "Service:  TSDebugPlot.Plot\n" +
                 "Method:   /TSDebugPlot.Plot/PlotData\n\n" +
                 "Request JSON fields:\n" +
                 "  \"Plot Name\"   – unique identifier for the plot\n" +
-                "  \"Plot Label\"  – array of series names (one per column)\n" +
-                "  \"Data\"        – CSV string (rows=newline, columns=comma)\n" +
-                "  \"Plot Type\"   – \"Graph\" (waveform graph)\n\n" +
-                "Example:\n" +
+                "  \"Plot Label\"  – array of series/column names (one per CSV row)\n" +
+                "  \"Data\"        – CSV string: each ROW = one series; columns = samples\n" +
+                "  \"Plot Type\"   – \"Graph\" (waveform chart) | \"Table\" (data grid)\n\n" +
+                "Graph example:\n" +
                 "  {\"Plot Name\":\"Voltage\",\"Plot Label\":[\"CH1\",\"CH2\"],\n" +
-                "   \"Data\":\"1.0,2.0\\n3.0,4.0\",\"Plot Type\":\"Graph\"}",
+                "   \"Data\":\"1.0,2.0,3.0\\n4.0,5.0,6.0\",\"Plot Type\":\"Graph\"}\n\n" +
+                "Table example:\n" +
+                "  {\"Plot Name\":\"Results\",\"Plot Label\":[\"Temp\",\"Pressure\"],\n" +
+                "   \"Data\":\"25.1,26.3,27.0\\n101.1,102.4,103.2\",\"Plot Type\":\"Table\"}",
                 "Debug Plot Viewer – Help",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
+
+        // ── Utilities ─────────────────────────────────────────────────────────────
 
         private static void ParseAddress(string address, out string host, out int port)
         {

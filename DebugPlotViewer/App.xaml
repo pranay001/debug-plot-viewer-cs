@@ -5,8 +5,14 @@
              xmlns:views="clr-namespace:DebugPlotViewer.Views"
              StartupUri="Views/MainWindow.xaml">
     <Application.Resources>
+        <!-- Graph (waveform chart) -->
         <DataTemplate DataType="{x:Type vm:PlotViewModel}">
             <views:PlotView />
+        </DataTemplate>
+
+        <!-- Table (data grid) -->
+        <DataTemplate DataType="{x:Type vm:TableViewModel}">
+            <views:TableView />
         </DataTemplate>
     </Application.Resources>
 </Application>
